@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Edit task</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Karla:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="wrap editor">
+
+  <header class="masthead">
+    <div>
+      <h1 class="wordmark">Edit<span>·</span>Task</h1>
+      <p class="tagline" id="crumb">Task #{{ task_id }}</p>
+    </div>
+    <div class="masthead-right">
+      <span id="wall-clock">--:--:--</span>
+      <a class="btn ghost tiny" href="/">Back to board</a>
+    </div>
+  </header>
+
+  <div class="countdown editor-countdown" id="editor-countdown" data-deadline="" data-status="todo">·····</div>
+
+  <section class="panel" id="editor-panel">
+    <h2>Details</h2>
+    <form id="edit-form" class="field-row">
+      <div class="wide">
+        <label for="e-title">Title</label>
+        <input id="e-title" required maxlength="200">
+      </div>
+      <div class="wide">
+        <label for="e-desc">Notes</label>
+        <textarea id="e-desc"></textarea>
+      </div>
+      <div>
+        <label for="e-priority">Priority</label>
+        <select id="e-priority">
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+          <option value="urgent">Urgent</option>
+        </select>
+      </div>
+      <div>
+        <label for="e-status">Status</label>
+        <select id="e-status">
+          <option value="todo">To do</option>
+          <option value="in_progress">In progress</option>
+          <option value="done">Done</option>
+        </select>
+      </div>
+      <div>
+        <label for="e-deadline">Deadline</label>
+        <input id="e-deadline" type="datetime-local">
+      </div>
+      <div class="wide actions">
+        <span>
+          <button type="submit">Save changes</button>
+          <button type="button" class="ghost" id="clear-deadline">Clear deadline</button>
+        </span>
+        <button type="button" class="danger" id="delete-task">Delete task</button>
+      </div>
+    </form>
+    <p class="meta" id="meta"></p>
+  </section>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script src="{{ url_for('static', filename='timer.js') }}"></script>
+<script>
+(function () {
+  "use strict";
+
+  var TASK_ID = {{ task_id }};
+  var $ = function (id) { return document.getElementById(id); };
+
+  function toast(message, isError) {
+    var el = $("toast");
+    el.textContent = message;
+    el.className = "show" + (isError ? " error" : "");
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(function () { el.className = ""; }, 3200);
+  }
+
+  async function api(path, options, retry) {
+    options = options || {};
+    var access = localStorage.getItem("tm_access");
+    var headers = { "Content-Type": "application/json" };
+    if (access) headers.Authorization = "Bearer " + access;
+
+    var res = await fetch(path, {
+      method: options.method || "GET",
+      headers: headers,
+      body: options.body ? JSON.stringify(options.body) : undefined
+    });
+
+    var refreshToken = localStorage.getItem("tm_refresh");
+    if (res.status === 401 && refreshToken && !retry) {
+      var refreshed = await fetch("/api/auth/refresh", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + refreshToken }
+      });
+      if (refreshed.ok) {
+        var fresh = await refreshed.json();
+        localStorage.setItem("tm_access", fresh.access_token);
+        return api(path, options, true);
+      }
+    }
+
+    var data = await res.json().catch(function () { return {}; });
+    if (res.status === 401) {
+      window.location.href = "/";
+      throw new Error("Sign in first.");
+    }
+    if (!res.ok) throw new Error(data.message || "Request failed (" + res.status + ").");
+    return data;
+  }
+
+  function fill(task) {
+    $("e-title").value = task.title;
+    $("e-desc").value = task.description || "";
+    $("e-priority").value = task.priority;
+    $("e-status").value = task.status;
+    $("e-deadline").value = TaskTimer.toInputValue(task.deadline);
+
+    var cell = $("editor-countdown");
+    cell.setAttribute("data-deadline", task.deadline || "");
+    cell.setAttribute("data-status", task.status);
+    TaskTimer.paint();
+
+    $("crumb").textContent = "Task #" + task.id + (task.owner ? " · " + task.owner : "");
+    $("meta").textContent = "Created " + new Date(task.created_at).toLocaleString() +
+      " · last saved " + new Date(task.updated_at).toLocaleString();
+  }
+
+  /* Preview the countdown while the fields are being edited. */
+  function preview() {
+    var cell = $("editor-countdown");
+    cell.setAttribute("data-deadline", TaskTimer.fromInputValue($("e-deadline").value) || "");
+    cell.setAttribute("data-status", $("e-status").value);
+    TaskTimer.paint();
+  }
+
+  $("e-deadline").addEventListener("input", preview);
+  $("e-status").addEventListener("input", preview);
+
+  $("clear-deadline").onclick = function () {
+    $("e-deadline").value = "";
+    preview();
+  };
+
+  $("edit-form").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    try {
+      var data = await api("/api/tasks/" + TASK_ID, {
+        method: "PATCH",
+        body: {
+          title: $("e-title").value.trim(),
+          description: $("e-desc").value.trim(),
+          priority: $("e-priority").value,
+          status: $("e-status").value,
+          deadline: TaskTimer.fromInputValue($("e-deadline").value)
+        }
+      });
+      fill(data.task);
+      toast("Changes saved.");
+    } catch (err) { toast(err.message, true); }
+  });
+
+  $("delete-task").onclick = async function () {
+    if (!confirm("Delete this task? This cannot be undone.")) return;
+    try {
+      await api("/api/tasks/" + TASK_ID, { method: "DELETE" });
+      window.location.href = "/";
+    } catch (err) { toast(err.message, true); }
+  };
+
+  (async function boot() {
+    if (!localStorage.getItem("tm_access")) {
+      window.location.href = "/";
+      return;
+    }
+    try {
+      var data = await api("/api/tasks/" + TASK_ID);
+      fill(data.task);
+    } catch (err) {
+      toast(err.message, true);
+      $("editor-panel").innerHTML = '<h2>Task not available</h2><p class="hint">' +
+        err.message + ' <a href="/">Back to the board</a>.</p>';
+    }
+  })();
+})();
+</script>
+</body>
+</html>

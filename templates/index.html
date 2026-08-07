@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Task Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Karla:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <div>
+      <h1 class="wordmark">Task<span>·</span>Board</h1>
+      <p class="tagline">Deadlines, in order of departure</p>
+    </div>
+    <div class="masthead-right">
+      <span id="wall-clock">--:--:--</span>
+      <div class="who hidden" id="who">
+        <strong id="who-name"></strong>
+        <span class="role-tag" id="who-role"></span>
+      </div>
+      <button class="ghost tiny hidden" id="sign-out">Sign out</button>
+    </div>
+  </header>
+
+  <!-- ===================== signed out ===================== -->
+  <section class="gate panel" id="gate">
+    <div class="tabs" role="tablist">
+      <button id="tab-login" role="tab" aria-selected="true">Sign in</button>
+      <button id="tab-register" role="tab" aria-selected="false">Create account</button>
+    </div>
+
+    <form id="login-form">
+      <div>
+        <label for="login-id">Username or email</label>
+        <input id="login-id" name="identifier" autocomplete="username" required>
+      </div>
+      <div>
+        <label for="login-pw">Password</label>
+        <input id="login-pw" type="password" autocomplete="current-password" required>
+      </div>
+      <button type="submit">Sign in</button>
+      <p class="hint">Seeded demo login: admin / adminpass123</p>
+    </form>
+
+    <form id="register-form" class="hidden">
+      <div>
+        <label for="reg-user">Username</label>
+        <input id="reg-user" autocomplete="username" required minlength="3">
+      </div>
+      <div>
+        <label for="reg-email">Email</label>
+        <input id="reg-email" type="email" autocomplete="email" required>
+      </div>
+      <div>
+        <label for="reg-pw">Password</label>
+        <input id="reg-pw" type="password" autocomplete="new-password" required minlength="8">
+      </div>
+      <button type="submit">Create account</button>
+      <p class="hint">The very first account on a fresh database becomes the admin.</p>
+    </form>
+  </section>
+
+  <!-- ===================== signed in ====================== -->
+  <main id="app" class="hidden">
+
+    <div class="counters" id="counters"></div>
+
+    <section class="panel" id="compose">
+      <h2>New task</h2>
+      <form id="task-form" class="field-row">
+        <div class="wide">
+          <label for="t-title">Title</label>
+          <input id="t-title" required maxlength="200" placeholder="Ship the invoice export">
+        </div>
+        <div class="wide">
+          <label for="t-desc">Notes</label>
+          <textarea id="t-desc" placeholder="Anything you need to remember"></textarea>
+        </div>
+        <div>
+          <label for="t-priority">Priority</label>
+          <select id="t-priority">
+            <option value="low">Low</option>
+            <option value="medium" selected>Medium</option>
+            <option value="high">High</option>
+            <option value="urgent">Urgent</option>
+          </select>
+        </div>
+        <div>
+          <label for="t-status">Status</label>
+          <select id="t-status">
+            <option value="todo" selected>To do</option>
+            <option value="in_progress">In progress</option>
+            <option value="done">Done</option>
+          </select>
+        </div>
+        <div>
+          <label for="t-deadline">Deadline</label>
+          <input id="t-deadline" type="datetime-local">
+        </div>
+        <div>
+          <button type="submit">Add task</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="filters">
+      <div>
+        <label for="f-q">Search</label>
+        <input id="f-q" type="search" placeholder="Title or notes">
+      </div>
+      <div>
+        <label for="f-priority">Priority</label>
+        <select id="f-priority">
+          <option value="">Any</option>
+          <option value="urgent">Urgent</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+        </select>
+      </div>
+      <div>
+        <label for="f-status">Status</label>
+        <select id="f-status">
+          <option value="">Any</option>
+          <option value="todo">To do</option>
+          <option value="in_progress">In progress</option>
+          <option value="done">Done</option>
+        </select>
+      </div>
+      <div>
+        <label for="f-due-before">Due before</label>
+        <input id="f-due-before" type="date">
+      </div>
+      <div>
+        <label for="f-sort">Sort by</label>
+        <select id="f-sort">
+          <option value="deadline">Deadline</option>
+          <option value="priority">Priority</option>
+          <option value="created_at">Created</option>
+          <option value="title">Title</option>
+        </select>
+      </div>
+      <div>
+        <label for="f-order">Order</label>
+        <select id="f-order">
+          <option value="asc">Ascending</option>
+          <option value="desc">Descending</option>
+        </select>
+      </div>
+      <div class="hidden" id="scope-wrap">
+        <label for="f-scope">Scope</label>
+        <select id="f-scope">
+          <option value="mine">My tasks</option>
+          <option value="all">Everyone's tasks</option>
+        </select>
+      </div>
+      <div>
+        <button class="ghost" id="reset-filters" type="button">Clear filters</button>
+      </div>
+    </section>
+
+    <section class="board">
+      <div class="board-head">
+        <span>Status</span><span>Task</span><span>Priority</span><span>Deadline</span><span>Time left</span><span></span>
+      </div>
+      <div id="rows"></div>
+      <div class="pager">
+        <span id="pager-info">—</span>
+        <span>
+          <button class="ghost tiny" id="prev-page" type="button">Previous</button>
+          <button class="ghost tiny" id="next-page" type="button">Next</button>
+        </span>
+      </div>
+    </section>
+
+    <section class="panel hidden" id="admin">
+      <h2>People</h2>
+      <table>
+        <thead>
+          <tr><th>User</th><th>Email</th><th>Role</th><th>Tasks</th><th></th></tr>
+        </thead>
+        <tbody id="user-rows"></tbody>
+      </table>
+    </section>
+  </main>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script src="{{ url_for('static', filename='timer.js') }}"></script>
+<script>
+(function () {
+  "use strict";
+
+  var store = {
+    get access() { return localStorage.getItem("tm_access"); },
+    get refresh() { return localStorage.getItem("tm_refresh"); },
+    get user() { try { return JSON.parse(localStorage.getItem("tm_user")); } catch (e) { return null; } },
+    save: function (payload) {
+      localStorage.setItem("tm_access", payload.access_token);
+      if (payload.refresh_token) localStorage.setItem("tm_refresh", payload.refresh_token);
+      localStorage.setItem("tm_user", JSON.stringify(payload.user));
+    },
+    clear: function () {
+      ["tm_access", "tm_refresh", "tm_user"].forEach(function (k) { localStorage.removeItem(k); });
+    }
+  };
+
+  var state = { page: 1, pages: 1, me: null };
+  var $ = function (id) { return document.getElementById(id); };
+
+  function toast(message, isError) {
+    var el = $("toast");
+    el.textContent = message;
+    el.className = "show" + (isError ? " error" : "");
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(function () { el.className = ""; }, 3200);
+  }
+
+  /* ---------- API ---------- */
+  async function api(path, options, retry) {
+    options = options || {};
+    var headers = { "Content-Type": "application/json" };
+    if (store.access) headers.Authorization = "Bearer " + store.access;
+
+    var res = await fetch(path, {
+      method: options.method || "GET",
+      headers: headers,
+      body: options.body ? JSON.stringify(options.body) : undefined
+    });
+
+    if (res.status === 401 && store.refresh && !retry) {
+      var refreshed = await fetch("/api/auth/refresh", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + store.refresh }
+      });
+      if (refreshed.ok) {
+        var fresh = await refreshed.json();
+        localStorage.setItem("tm_access", fresh.access_token);
+        return api(path, options, true);
+      }
+      signOut("Your session expired. Sign in again.");
+      throw new Error("session expired");
+    }
+
+    var data = await res.json().catch(function () { return {}; });
+    if (!res.ok) throw new Error(data.message || "Request failed (" + res.status + ").");
+    return data;
+  }
+
+  /* ---------- auth screens ---------- */
+  function showTab(which) {
+    $("tab-login").setAttribute("aria-selected", String(which === "login"));
+    $("tab-register").setAttribute("aria-selected", String(which === "register"));
+    $("login-form").classList.toggle("hidden", which !== "login");
+    $("register-form").classList.toggle("hidden", which !== "register");
+  }
+
+  $("tab-login").onclick = function () { showTab("login"); };
+  $("tab-register").onclick = function () { showTab("register"); };
+
+  $("login-form").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    try {
+      var data = await api("/api/auth/login", {
+        method: "POST",
+        body: { username: $("login-id").value.trim(), password: $("login-pw").value }
+      });
+      store.save(data);
+      enter(data.user);
+    } catch (err) { toast(err.message, true); }
+  });
+
+  $("register-form").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    try {
+      var data = await api("/api/auth/register", {
+        method: "POST",
+        body: {
+          username: $("reg-user").value.trim(),
+          email: $("reg-email").value.trim(),
+          password: $("reg-pw").value
+        }
+      });
+      store.save(data);
+      enter(data.user);
+      toast("Account created. You are signed in.");
+    } catch (err) { toast(err.message, true); }
+  });
+
+  $("sign-out").onclick = function () { signOut("Signed out."); };
+
+  function signOut(message) {
+    store.clear();
+    state.me = null;
+    $("app").classList.add("hidden");
+    $("admin").classList.add("hidden");
+    $("who").classList.add("hidden");
+    $("sign-out").classList.add("hidden");
+    $("gate").classList.remove("hidden");
+    if (message) toast(message);
+  }
+
+  function enter(user) {
+    state.me = user;
+    $("gate").classList.add("hidden");
+    $("app").classList.remove("hidden");
+    $("who").classList.remove("hidden");
+    $("sign-out").classList.remove("hidden");
+    $("who-name").textContent = user.username;
+    $("who-role").textContent = user.role;
+    $("who-role").dataset.role = user.role;
+    $("scope-wrap").classList.toggle("hidden", user.role !== "admin");
+    $("admin").classList.toggle("hidden", user.role !== "admin");
+    load();
+    if (user.role === "admin") loadUsers();
+  }
+
+  /* ---------- board ---------- */
+  function query() {
+    var params = new URLSearchParams();
+    if ($("f-q").value.trim()) params.set("q", $("f-q").value.trim());
+    if ($("f-priority").value) params.set("priority", $("f-priority").value);
+    if ($("f-status").value) params.set("status", $("f-status").value);
+    if ($("f-due-before").value) {
+      params.set("due_before", TaskTimer.fromInputValue($("f-due-before").value + "T23:59:59"));
+    }
+    params.set("sort", $("f-sort").value);
+    params.set("order", $("f-order").value);
+    params.set("page", state.page);
+    if (state.me && state.me.role === "admin" && $("f-scope").value === "all") params.set("scope", "all");
+    return params.toString();
+  }
+
+  async function load() {
+    try {
+      var scoped = state.me.role === "admin" && $("f-scope").value === "all" ? "?scope=all" : "";
+      var [list, stats] = await Promise.all([
+        api("/api/tasks?" + query()),
+        api("/api/tasks/stats" + scoped)
+      ]);
+      renderCounters(stats);
+      renderRows(list.tasks);
+      state.pages = list.meta.pages || 1;
+      $("pager-info").textContent =
+        list.meta.total + " task" + (list.meta.total === 1 ? "" : "s") +
+        " · page " + list.meta.page + " of " + state.pages;
+      $("prev-page").disabled = list.meta.page <= 1;
+      $("next-page").disabled = list.meta.page >= state.pages;
+    } catch (err) { toast(err.message, true); }
+  }
+
+  function renderCounters(stats) {
+    var cards = [
+      { label: "Open", value: stats.by_status.todo + stats.by_status.in_progress },
+      { label: "In progress", value: stats.by_status.in_progress },
+      { label: "Done", value: stats.by_status.done, cls: "good" },
+      { label: "Overdue", value: stats.overdue, cls: stats.overdue ? "alert" : "" },
+      { label: "Urgent", value: stats.by_priority.urgent }
+    ];
+    $("counters").innerHTML = cards.map(function (c) {
+      return '<div class="counter ' + (c.cls || "") + '"><b>' + c.value + "</b><span>" + c.label + "</span></div>";
+    }).join("");
+  }
+
+  function escapeHtml(text) {
+    return String(text).replace(/[&<>"']/g, function (ch) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch];
+    });
+  }
+
+  var STATUS_LABEL = { todo: "To do", in_progress: "Working", done: "Done" };
+
+  function renderRows(tasks) {
+    if (!tasks.length) {
+      $("rows").innerHTML = '<div class="empty"><p>Nothing on the board. Add a task above.</p></div>';
+      return;
+    }
+    $("rows").innerHTML = tasks.map(function (t) {
+      var when = TaskTimer.formatDeadline(t.deadline);
+      var owner = t.owner && t.owner !== state.me.username
+        ? '<span class="owner">' + escapeHtml(t.owner) + "</span> " : "";
+      return '' +
+        '<article class="row ' + (t.status === "done" ? "done" : "") + '" data-id="' + t.id + '">' +
+          '<div class="cell-status">' +
+            '<button class="flap" data-status="' + t.status + '" data-action="cycle" title="Change status">' +
+              STATUS_LABEL[t.status] + "</button>" +
+          "</div>" +
+          '<div class="cell-title">' +
+            '<p class="title">' + owner + escapeHtml(t.title) + "</p>" +
+            (t.description ? '<p class="desc">' + escapeHtml(t.description) + "</p>" : "") +
+          "</div>" +
+          '<div class="cell-priority"><span class="chip" data-priority="' + t.priority + '">' + t.priority + "</span></div>" +
+          '<div class="cell-deadline"><span class="deadline">' + when.date +
+            (when.time ? " " + when.time : "") + "<small>" + (t.deadline ? "local time" : "no deadline") + "</small></span></div>" +
+          '<div class="cell-countdown"><div class="countdown" data-deadline="' + (t.deadline || "") +
+            '" data-status="' + t.status + '">·····</div></div>' +
+          '<div class="row-actions">' +
+            '<a class="btn ghost tiny" href="/tasks/' + t.id + '/edit">Edit</a>' +
+            '<button class="tiny danger" data-action="delete">Del</button>' +
+          "</div>" +
+        "</article>";
+    }).join("");
+    TaskTimer.paint($("rows"));
+  }
+
+  $("rows").addEventListener("click", async function (e) {
+    var button = e.target.closest("[data-action]");
+    if (!button) return;
+    var id = button.closest(".row").dataset.id;
+
+    if (button.dataset.action === "delete") {
+      if (!confirm("Delete this task?")) return;
+      try {
+        await api("/api/tasks/" + id, { method: "DELETE" });
+        toast("Task deleted.");
+        load();
+      } catch (err) { toast(err.message, true); }
+    }
+
+    if (button.dataset.action === "cycle") {
+      var next = { todo: "in_progress", in_progress: "done", done: "todo" }[button.dataset.status];
+      try {
+        await api("/api/tasks/" + id, { method: "PATCH", body: { status: next } });
+        load();
+      } catch (err) { toast(err.message, true); }
+    }
+  });
+
+  $("task-form").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    try {
+      await api("/api/tasks", {
+        method: "POST",
+        body: {
+          title: $("t-title").value.trim(),
+          description: $("t-desc").value.trim(),
+          priority: $("t-priority").value,
+          status: $("t-status").value,
+          deadline: TaskTimer.fromInputValue($("t-deadline").value)
+        }
+      });
+      e.target.reset();
+      $("t-priority").value = "medium";
+      state.page = 1;
+      toast("Task added.");
+      load();
+    } catch (err) { toast(err.message, true); }
+  });
+
+  /* ---------- filters ---------- */
+  var debounce;
+  ["f-q", "f-priority", "f-status", "f-due-before", "f-sort", "f-order", "f-scope"].forEach(function (id) {
+    $(id).addEventListener("input", function () {
+      clearTimeout(debounce);
+      state.page = 1;
+      debounce = setTimeout(load, 220);
+    });
+  });
+
+  $("reset-filters").onclick = function () {
+    ["f-q", "f-due-before"].forEach(function (id) { $(id).value = ""; });
+    $("f-priority").value = "";
+    $("f-status").value = "";
+    $("f-sort").value = "deadline";
+    $("f-order").value = "asc";
+    state.page = 1;
+    load();
+  };
+
+  $("prev-page").onclick = function () { if (state.page > 1) { state.page--; load(); } };
+  $("next-page").onclick = function () { if (state.page < state.pages) { state.page++; load(); } };
+
+  /* ---------- admin ---------- */
+  async function loadUsers() {
+    try {
+      var data = await api("/api/users");
+      $("user-rows").innerHTML = data.users.map(function (u) {
+        var isMe = u.id === state.me.id;
+        return "<tr>" +
+          "<td>" + escapeHtml(u.username) + (isMe ? " (you)" : "") + "</td>" +
+          "<td>" + escapeHtml(u.email) + "</td>" +
+          '<td><span class="role-tag" data-role="' + u.role + '">' + u.role + "</span></td>" +
+          "<td>" + u.task_count + "</td>" +
+          "<td>" + (isMe ? "" :
+            '<button class="tiny ghost" data-user="' + u.id + '" data-role="' +
+            (u.role === "admin" ? "user" : "admin") + '">Make ' +
+            (u.role === "admin" ? "regular" : "admin") + "</button>") + "</td>" +
+          "</tr>";
+      }).join("");
+    } catch (err) { toast(err.message, true); }
+  }
+
+  $("user-rows").addEventListener("click", async function (e) {
+    var button = e.target.closest("button[data-user]");
+    if (!button) return;
+    try {
+      await api("/api/users/" + button.dataset.user + "/role", {
+        method: "PATCH",
+        body: { role: button.dataset.role }
+      });
+      toast("Role updated.");
+      loadUsers();
+    } catch (err) { toast(err.message, true); }
+  });
+
+  /* ---------- boot ---------- */
+  (async function boot() {
+    if (!store.access) return;
+    try {
+      var data = await api("/api/auth/me");
+      store.save({ access_token: store.access, user: data.user });
+      enter(data.user);
+    } catch (err) { signOut(); }
+  })();
+})();
+</script>
+</body>
+</html>
